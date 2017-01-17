@@ -1,75 +1,65 @@
-const https = require('https');
-var fs = require('fs');
-let currentDumpDir = '';
-let options = [];
+const Airtable = require('airtable');
+const fs = require('fs');
 
 const tables = ['Epreuves','Tests','Images Propositions','Acquis'];
+let base = new Airtable({ apiKey: 'myKey' }).base('appHAIFk9u1qqglhX');
+let currentDumpDir = '';
 let dumpFiles = [];
+let counter = 0;
+
 createDailyBackUpRepo();
 createFiles();
+fetchData();
 
 
-for (var i = 0; i < tables.length; i++) {
-    options.push({
-        host: 'api.airtable.com',
-        path: '/v0/appHAIFk9u1qqglhX/' + tables[i].replace(' ','%20') + '&maxRecords=',
-        method: 'GET',
-        headers: {
-            Authorization: "Bearer YourKey"
+function fetchData() {
+    let dataJson = [];
+    let t = 0;
+    console.log('-----------------'+tables[counter]+'-----------------');
+    base(tables[counter]).select().eachPage(function page(records, fetchNextPage) {
+        records.forEach(function (record) {
+            dataJson.push(JSON.stringify(record));
+        });
+        console.log(dataJson);
+        writeIntoFile(dumpFiles[counter],dataJson,fetchNextPage);
+        console.log('page'+ t);
+        t++;
+    }, function done(error) {
+        if (error) {
+            console.log(error);
         }
+        console.log('----------------- * END '+tables[counter]+' *----------------- \n');
+        fetchNext();
     });
 }
 
-    let counter = 0;
-    https.get(options[counter], function (res){
-        let pieceOfFile = "";
-        res.on('data', function (chunk) {
-            pieceOfFile += chunk;
-        });
-        res.on('end',function(){
-            writeIntoFile(dumpFiles[counter], pieceOfFile);
-            next();
-        });
-    });
-
-
-function next(){
-    ++counter;
-    if (counter>3) return;
-    https.get(options[counter], function (res){
-        let pieceOfFile = "";
-        res.on('data', function (chunk) {
-            pieceOfFile += chunk;
-        });
-        res.on('end',function(){
-            writeIntoFile(dumpFiles[counter], pieceOfFile);
-            next();
-        });
-    });
+function fetchNext(){
+    counter++;
+    if (counter > tables.length) return;
+    return fetchData();
 }
 
-
-
-
-function createFiles(){
+function createFiles() {
     tables.forEach(function (item) {
         const currentFile = 'Pix_Production_' + item.replace(' ', '') + '.json';
-        dumpFiles.push(currentDumpDir + '/' +currentFile);
+        dumpFiles.push(currentDumpDir + '/' + currentFile);
         fs.openSync(currentDumpDir + '/' + currentFile, 'w+');
     });
 }
-
 function createDailyBackUpRepo() {
     const today = new Date();
-    currentDumpDir = today.getFullYear() + '-' + ( today.getMonth() + 1 ) + '-' + today.getDate();
-    if (!fs.existsSync(currentDumpDir)){
+    let month = parseInt(today.getMonth()) + 1;
+    month =  month <= 9? '0'+ month : month + 1;
+    const day = parseInt(today.getDate()) <= 9? '0'+ today.getDate()  : today.getDate();
+    currentDumpDir = today.getFullYear() + '-' + ( month ) + '-' + day;
+    if (!fs.existsSync(currentDumpDir)) {
         fs.mkdirSync(currentDumpDir);
     }
 }
-
-function writeIntoFile(fileName, chunk){
-    fs.writeFile(fileName,chunk,function(err, data){
+function writeIntoFile(fileName, dataJson,callback) {
+    fs.writeFile(fileName, dataJson, function (err, data) {
         if (err) throw err;
         console.log('It\'s saved!');
+        callback();
     });
 }
